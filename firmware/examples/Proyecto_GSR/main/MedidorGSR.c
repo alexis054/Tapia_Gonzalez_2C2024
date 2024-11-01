@@ -55,13 +55,19 @@
 
 TaskHandle_t covert_digital_task_handle = NULL;
 TaskHandle_t turnon_LEDs_GSR_task_handle = NULL;
-TaskHandle_t fft_task_handle = NULL;
+
 
 uint16_t reading = 0;
 bool measure_reading = false;
 bool filter = false;
 
 /*==================[internal functions declaration]=========================*/
+
+void read_data(uint8_t * data, uint8_t length){
+	if(data[0] == 'R'){
+        xTaskNotifyGive(covert_digital_task_handle);
+    }
+}
 
 void FuncTimerA(void* param){
 
@@ -73,43 +79,23 @@ void FuncTimerA(void* param){
 
 
 void FuncTimerSenial(void* param){
-    xTaskNotifyGive(fft_task_handle);
+    xTaskNotifyGive(covert_digital_task_handle);
 }
 
-void read_data(uint8_t * data, uint8_t length)
-{
-    switch(data[0]){
-        case 'A':
-            filter = true;
-            break;
-        case 'a':
-            filter = false;
-            break;
-    }
+static void convert_digital(void *param){
+     char msg[128];
+	while(true){
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		AnalogInputReadSingle(CH1, &reading);
+		UartSendString(UART_PC, (char *)UartItoa(reading, 10));
+		UartSendString(UART_PC, "\r" );
+          sprintf(msg,"*G%d*\n", reading);
+            BleSendString(msg);
+     
+	}
 }
-static void FftTask(void *pvParameter)
-{
-    char msg[128];
-    char msg_chunk[24];
-    static uint8_t indice = 0;
-    while(true){
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        if(filter){
-            HiPassFilter(&ecg[indice], ecg_filt, CHUNK);
-            LowPassFilter(ecg_filt, ecg_filt, CHUNK);
-        } else{
-            memcpy(ecg_filt, &ecg[indice], CHUNK*sizeof(float));
-        }
-        strcpy(msg, "");
-        for(uint8_t i=0; i<CHUNK; i++){
-            sprintf(msg_chunk, "*G%.2f*", ecg_filt[i]);
-            strcat(msg, msg_chunk);
-        }
-        indice += CHUNK;
 
-        BleSendString(msg);
-    }
-}
+
 
 static void turnon_LEDs_GSR(void *pvParameter)
 { 
@@ -139,10 +125,10 @@ void static read_switches(void *pvParameter)
 
 /*==================[external functions definition]==========================*/
 void app_main(void){
-    uint8_t blink = 0;
-    static neopixel_color_t color;
+ 
+   
     ble_config_t ble_configuration = {
-        "ESP_EDU_1",
+        "Sensor_GSR",
         read_data
     };
     timer_config_t timer_senial = {
@@ -152,27 +138,12 @@ void app_main(void){
         .param_p = NULL
     };
 
-    NeoPixelInit(BUILT_IN_RGB_LED_PIN, BUILT_IN_RGB_LED_LENGTH, &color);
-    NeoPixelAllOff();
-    TimerInit(&timer_senial);
-    LedsInit();  
-    LowPassInit(CONFIG_MEASURE_PERIOD, 30, ORDER_2);
-    HiPassInit(CONFIG_MEASURE_PERIOD, 1, ORDER_2);
-    BleInit(&ble_configuration);
-
-    xTaskCreate(&FftTask, "FFT", 4096, NULL, 5, &fft_task_handle);
-    TimerStart(timer_senial.timer);
-
- 
-    
     analog_input_config_t analog_input ={
 		.input = CH1,
 		.mode = ADC_SINGLE,
 	};
-	
-	AnalogInputInit(&analog_input);
-	AnalogOutputInit();
 
+    
 	serial_config_t serial_pc ={
 		.port = UART_PC,
 		.baud_rate = BAUD_RATE,
@@ -180,8 +151,7 @@ void app_main(void){
 		.param_p = NULL,
 	};
 
-	UartInit(&serial_pc);
-
+    
 	timer_config_t timer_measurement = {
     	.timer = TIMER_A,
         .period = CONFIG_MEASURE_PERIOD,
@@ -189,18 +159,31 @@ void app_main(void){
         .param_p = NULL
     };
 
+    
+    LedsInit();  
+    BleInit(&ble_configuration);
+    AnalogInputInit(&analog_input);
+	AnalogOutputInit();
+    UartInit(&serial_pc);
 	LedsInit();
 	SwitchesInit();
 
-	SwitchActivInt(SWITCH_1, read_switches, &measure_reading);
+    SwitchActivInt(SWITCH_1, read_switches, &measure_reading);
 	SwitchActivInt(SWITCH_2, LedsOffAll, NULL);
 
-	TimerInit(&timer_measurement);
 
-	xTaskCreate(&convert_digital, "Convertir señal a Digital", 1024, NULL, 5, &covert_digital_task_handle);
+
+    TimerInit(&timer_senial);
+    TimerInit(&timer_measurement);
+
+
+    xTaskCreate(&convert_digital, "Convertir señal a Digital", 1024, NULL, 5, &covert_digital_task_handle);
 	xTaskCreate(&turnon_LEDs_GSR, "Prender los LEDs segun los eventos", 1024, NULL, 5, &turnon_LEDs_GSR_task_handle);
 
 	TimerStart(timer_measurement.timer);
+    TimerStart(timer_senial.timer);
+
+	
 }
 
 /*==================[end of file]============================================*/

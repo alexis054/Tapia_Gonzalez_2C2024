@@ -7,31 +7,10 @@
             "path": "./middelware"
         },
         {
-            "path": "examples/ej_dsp"
-        },
-        {
-            "path": "examples/ej_bluetooth_ledrgb"
-        },
-        {
             "path": "examples/ej_bluetooth_fft"
         },
         {
             "path": "examples/ej_bluetooth_filter"
-        },
-        {
-            "path": "examples/ej_lcdcolor_ecg"
-        },
-        {
-            "path": "examples/ej_lcdcolor_audioplayer"
-        },
-        {
-            "path": "examples/ej_bluetooth_mouse_kb"
-        },
-        {
-            "path": "examples/ej_max3010x"
-        },
-        {
-            "path": "examples/ej_mfrc522"
         },
         {
             "path": "examples/Proyecto_GSR"
